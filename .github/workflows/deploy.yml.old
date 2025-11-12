@@ -1,0 +1,31 @@
+name: Local NGINX Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+
+    steps:
+      - name: Cloner le dépôt
+        uses: actions/checkout@v4
+
+      - name: Construire et lancer le conteneur Docker localement
+        run: |
+          echo "🧹 Suppression de l'ancien conteneur s’il existe..."
+          docker rm -f uam-nginx-app || true
+
+          echo "🔨 Construction de l'image Docker..."
+          docker build -t uam-nginx-app .
+
+          echo "🚀 Lancement du conteneur sur le port 30086..."
+          docker run -d --name uam-nginx-app -p 30086:80 uam-nginx-app
+
+          echo "🔍 Vérification du statut du conteneur..."
+          docker ps
+
+          echo "🧪 Test de disponibilité du site..."
+          sleep 5
+          curl -I http://localhost:30086 || echo "⚠️ Le conteneur ne répond pas encore"

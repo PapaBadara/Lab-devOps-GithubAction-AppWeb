@@ -1,4 +1,4 @@
-name: Local NGINX Deploy
+name: Deploy to Remote VM
 
 on:
   push:
@@ -6,26 +6,24 @@ on:
 
 jobs:
   deploy:
-    runs-on: self-hosted
+    runs-on: self-hosted  # Le runner est local ou sur une autre machine
 
     steps:
       - name: Cloner le dépôt
         uses: actions/checkout@v4
 
-      - name: Construire et lancer le conteneur Docker localement
-        run: |
-          echo "🧹 Suppression de l'ancien conteneur s’il existe..."
-          docker rm -f uam-nginx-app || true
+      - name: Déployer sur la VM via SSH
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}         # IP ou hostname de la VM
+          username: ${{ secrets.VM_USER }}     # Utilisateur SSH
+          key: ${{ secrets.VM_SSH_KEY }}       # Clé privée SSH stockée dans GitHub Secrets
+          script: |
+            echo "🧹 Arrêt et suppression de l'ancien conteneur..."
+            docker rm -f uam-nginx-app || true
 
-          echo "🔨 Construction de l'image Docker..."
-          docker build -t uam-nginx-app .
+            echo "🔨 Construction et lancement du conteneur Docker..."
+            docker build -t uam-nginx-app /home/${{ secrets.VM_USER }}/uam-nginx-lab
+            docker run -d --name uam-nginx-app -p 30086:80 uam-nginx-app
 
-          echo "🚀 Lancement du conteneur sur le port 30086..."
-          docker run -d --name uam-nginx-app -p 30086:80 uam-nginx-app
-
-          echo "🔍 Vérification du statut du conteneur..."
-          docker ps
-
-          echo "🧪 Test de disponibilité du site..."
-          sleep 5
-          curl -I http://localhost:30086 || echo "⚠️ Le conteneur ne répond pas encore"
+            echo "✅ Conteneur lancé sur la VM"
