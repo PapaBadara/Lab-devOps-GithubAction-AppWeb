@@ -1,29 +1,60 @@
-name: Deploy to Remote VM
+name: Deploy to VM via Docker
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 jobs:
   deploy:
-    runs-on: self-hosted  # Le runner est local ou sur une autre machine
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Cloner le dépôt
+      # 1️⃣ Checkout du code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Déployer sur la VM via SSH
+      # 2️⃣ Nettoyer le dossier cible sur la VM
+      - name: Clean target folder on VM
         uses: appleboy/ssh-action@v0.1.7
         with:
-          host: ${{ secrets.VM_HOST }}         # IP ou hostname de la VM
-          username: ${{ secrets.VM_USER }}     # Utilisateur SSH
-          key: ${{ secrets.VM_SSH_KEY }}       # Clé privée SSH stockée dans GitHub Secrets
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
           script: |
-            echo "🧹 Arrêt et suppression de l'ancien conteneur..."
+            echo "🧹 Nettoyage du dossier /home/${{ secrets.VM_USER }}/uam-nginx-lab..."
+            rm -rf /home/${{ secrets.VM_USER }}/uam-nginx-lab
+            mkdir -p /home/${{ secrets.VM_USER }}/uam-nginx-lab
+            echo "✅ Dossier nettoyé"
+
+      # 3️⃣ Copier le projet sur la VM
+      - name: Copy files to VM
+        uses: appleboy/scp-action@v0.1.4
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          source: "./*"
+          target: "/home/${{ secrets.VM_USER }}/uam-nginx-lab"
+
+      # 4️⃣ Build et run Docker sur la VM
+      - name: Build and run Docker on VM
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          port: 22
+          script: |
+            echo "🧹 Arrêt et suppression de l'ancien conteneur Docker..."
             docker rm -f uam-nginx-app || true
 
-            echo "🔨 Construction et lancement du conteneur Docker..."
+            echo "🔨 Construction de l'image Docker..."
             docker build -t uam-nginx-app /home/${{ secrets.VM_USER }}/uam-nginx-lab
+
+            echo "🚀 Lancement du conteneur sur le port 30086..."
             docker run -d --name uam-nginx-app -p 30086:80 uam-nginx-app
 
-            echo "✅ Conteneur lancé sur la VM"
+            echo "✅ Déploiement terminé avec succès !"
